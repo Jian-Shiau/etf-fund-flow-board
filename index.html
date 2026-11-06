@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>【东财策略 金科】重点ETF资金看板</title>
+<script src="echarts.min.js"></script>
+<script>
+if (!window.echarts) {
+  document.write('<script src="https://ai-oss.eastmoney.com/web/prd/llm-static-resources/libs/echarts@6.0.0.min.js"><\/script>');
+}
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>【东财策略 金科】重点ETF资金看板</h1>
+    <div class="sub">联系人：陈果 / 金科</div>
+    <nav>
+      <a href="#part1">① 盘中分钟观测</a>
+      <a href="#part2">② 放量信号对比</a>
+      <a href="#part3">③ 日度资金全景</a>
+    </nav>
+  </header>
+
+  <section class="part" id="part1">
+    <h2 class="pt">第一部分 · 盘中分钟观测</h2>
+    <div class="status">
+      <span class="tag" id="tagDate">--</span>
+      <span class="tag" id="tagUpdate">未加载</span>
+      <span class="tag" id="tagCountdown" style="display:none"></span>
+      <button id="btnRefresh" type="button">立即刷新</button>
+      <button id="btnPause" type="button">暂停自动刷新</button>
+    </div>
+    <section class="chart-wrap"><div id="chart"></div></section>
+    <section class="chart-wrap">
+      <div class="cum-pick"><select id="cumDate"><option value="">选择对比日期</option></select></div>
+      <div class="chart" id="chartCum"></div>
+    </section>
+<h2 class="pt" style="margin-top:18px">20大ETF放量案例</h2>
+    <section class="chart-wrap"><div class="chart" id="chartTypCase"></div></section>
+    <section class="chart-wrap"><div class="chart" id="chartTypNorm"></div></section>
+    <section class="table-wrap">
+      <h2>单只ETF当日表现（按成交额降序，条形背景按成交额相对最大值比例）</h2>
+      <div class="tscroll">
+        <table>
+          <thead><tr>
+            <th>代码</th><th>名称</th><th class="num">当日成交额(亿)</th><th class="num">占比</th><th class="num">涨跌幅</th>
+          </tr></thead>
+          <tbody id="etfTable"></tbody>
+        </table>
+      </div>
+    </section>
+    <footer>
+      数据来源：Choice。客观数据仅供参考，不构成投资建议。
+    </footer>
+  </section>
+
+  <section class="part" id="part2">
+    <h2 class="pt">第二部分 · ETF放量信号</h2>
+    <div class="sub">放量日 = 单日净流入 &gt; 100亿（申赎口径）；蓝柱 / 红柱 = 放量日，黄柱 = 近期交易日</div>
+    <div class="status">
+      <span class="tag live" id="tagAmt">--</span>
+      <span class="tag" id="tagNf">--</span>
+    </div>
+    <section class="chart-wrap"><div class="chart" id="chartAmt"></div></section>
+    <section class="chart-wrap"><div class="chart" id="chartNf"></div></section>
+    <footer>
+      数据来源：Choice。客观数据仅供参考，不构成投资建议。
+    </footer>
+  </section>
+
+  <section class="part" id="part3">
+    <h2 class="pt">第三部分 · 日度资金全景</h2>
+    <section class="chart-wrap"><div class="chart" id="chartDAmt"></div></section>
+    <section class="chart-wrap"><div class="chart" id="chartDNf"></div></section>
+    <section class="chart-wrap"><div class="chart" id="chartBroad"></div></section>
+    <section class="table-wrap">
+      <h2>最近一个月 · 各类宽基ETF日度净流入（亿元，红=净申购 / 绿=净赎回，颜色深浅按当列相对大小）</h2>
+      <div class="tscroll"><table id="broadTable"></table></div>
+    </section>
+    <footer>
+      数据来源：Choice。客观数据仅供参考，不构成投资建议。
+    </footer>
+  </section>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

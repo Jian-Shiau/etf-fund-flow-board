@@ -1,0 +1,31 @@
+name: Update Daily ETF Data
+
+on:
+  schedule:
+    # 每个交易日北京时间 15:35（收盘更新分时累计）与 19:00（同步 T-1 申赎净流入）
+    - cron: '35 7 * * 1-5'
+    - cron: '0 11 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run daily update script
+        run: python3 update_daily.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.js cumdays.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: update daily ETF fund flow data ($(date -u +'%Y-%m-%d'))"
+            git push
+          fi

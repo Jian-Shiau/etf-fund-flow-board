@@ -1,0 +1,51 @@
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; background: #f5f6f8; color: #1c2330; padding: 16px; scroll-behavior: smooth; }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.top h1 { font-size: 22px; font-weight: 600; }
+  header.top .sub { font-size: 18px; font-weight: 600; color: #5a6472; margin-top: 6px; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; font-size: 13px; }
+  nav a { color: #2b5fd9; text-decoration: none; background: #e9eefb; padding: 5px 12px; border-radius: 6px; }
+  nav a:hover { background: #dbe5fa; }
+  .part { margin-top: 26px; }
+  .part .pt { font-size: 18px; font-weight: 600; }
+  .part .sub { font-size: 13px; color: #5a6472; margin-top: 4px; }
+  .status { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 12px; color: #5a6472; }
+  .status .tag { background: #e8ebf0; border-radius: 4px; padding: 2px 8px; }
+  .status .tag.err { background: #fdeceb; color: #b0342c; }
+  .status .tag.ok { background: #e7f5ee; color: #0c7a4d; }
+  .status .tag.live { background: #e7f5ee; color: #0c7a4d; }
+  .status .tag.warn { background: #fff4e0; color: #9a5b00; }
+  button { font-size: 12px; padding: 4px 10px; border: 1px solid #c9cfd8; border-radius: 4px; background: #fff; color: #1c2330; cursor: pointer; }
+  button:hover { background: #eef1f5; }
+  .chart-wrap { background: #fff; border: 1px solid #e3e6ec; border-radius: 8px; padding: 8px; margin-bottom: 14px; }
+  .cum-pick { padding: 2px 4px 8px; }
+  .cum-pick select { font-size: 12px; padding: 4px 8px; border: 1px solid #c9cfd8; border-radius: 4px; background: #fff; color: #1c2330; cursor: pointer; }
+  .chart { width: 100%; height: 420px; }
+  #chart { height: 380px; }
+  #chartAmt, #chartNf, #chartDAmt, #chartDNf { height: 420px; }
+  #chartTypCase, #chartTypNorm { height: 340px; }
+  #chartCum { height: 380px; }
+  /* 区间框选求和：按住左键或右键从左向右拖出选区 */
+  .brush-band { position: absolute; display: none; pointer-events: none; z-index: 4;
+                background: rgba(240, 180, 41, 0.16);
+                border-left: 1px solid #b07a1a; border-right: 1px solid #b07a1a; }
+  .brush-tip { position: absolute; display: none; pointer-events: none; z-index: 6;
+               transform: translateX(-50%); white-space: nowrap;
+               background: rgba(255, 255, 255, 0.96); border: 1px solid #e0c48a;
+               border-radius: 4px; padding: 3px 9px; font-size: 12px; color: #8a5a00;
+               box-shadow: 0 1px 5px rgba(0, 0, 0, 0.15); }
+  .table-wrap { background: #fff; border: 1px solid #e3e6ec; border-radius: 8px; padding: 12px 14px; margin-top: 14px; }
+  .table-wrap h2 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef0f4; white-space: nowrap; }
+  th { color: #5a6472; font-weight: 500; }
+  td.num, th.num { text-align: right; }
+  .up { color: #d93630; }
+  .down { color: #0aa06e; }
+  .pct-cell { border-radius: 3px; color: #1c2330; font-weight: 500; }
+  .amt-cell { position: relative; text-align: right; }
+  .amt-bg { position: absolute; top: 2px; bottom: 2px; left: 0; background: #fde9d9; z-index: 0; }
+  .amt-val { position: relative; z-index: 1; }
+  footer { font-size: 12px; color: #7a8494; line-height: 1.8; margin-top: 10px; }
+  @media (max-width: 640px) { .chart, #chart, #chartAmt, #chartNf, #chartDAmt, #chartDNf, #chartTypCase, #chartTypNorm, #chartCum { height: 260px; } .part .pt { font-size: 16px; } }
