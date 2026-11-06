@@ -13,9 +13,13 @@
     { code: "159361", m: "0" }, { code: "512050", m: "1" }, { code: "159633", m: "0" },
     { code: "560010", m: "1" }, { code: "159919", m: "0" }
   ];
-  var INDEX_SECID = "1.000001";
+  var INDICES = [
+    { code: "000300", secid: "1.000300", name: "沪深300", color: "#e8862e" },
+    { code: "399006", secid: "0.399006", name: "创业板指", color: "#0aa06e" },
+    { code: "000688", secid: "1.000688", name: "科创50", color: "#8e44ad" }
+  ];
   var REFRESH_TRADING = 60, REFRESH_IDLE = 300;
-  var BAR_LABEL = "20只ETF分钟成交额合计", IDX_LABEL = "上证综指";
+  var BAR_LABEL = "20只ETF分钟成交额合计";
   /* 左轴（分钟成交额）上限，单位亿元。
      两难：开盘集合竞价的第一分钟常有 15~40 亿的脉冲，若按它定标，盘中真正有意义的
      放量变化会被压成一条平线；但若只按「剔除开盘后的峰值」定标，开盘那根就会超出上限
@@ -73,11 +77,10 @@
     return NAME_MAP[code] || fallback || code;
   }
 
-  var cum = [], preClose = Number(initData.preClose) || null;
-  var minuteTimes = [], minuteBars = [], minuteCloses = [];
-  /* 当前 minuteBars 属于哪个交易日 —— 三线图要靠它判断「今日线」是不是真的今天的。
-     开盘前/周末时行情接口最新一根还是上一交易日，若不判断，今日线会画出昨天同一条曲线，
-     与「昨日线」完全重合（两根线叠在一起，看着像画错了）。 */
+  var cum = [];
+  var minuteTimes = [], minuteBars = [];
+  /* 多指数分时：按 INDICES 顺序存放 { code, name, color, preClose, closes: {}, pcts: [] } */
+  var indexSeriesData = [];
   var minuteDate = String(initData.date || "");
 
   function cls(v, base) { return (v > 0 ? "up" : v < 0 ? "down" : (base || "")); }
@@ -105,20 +108,12 @@
   }
   var FULL_T = fullAxis();
 
-  function alignToFull(times, bars, closes) {
+  function alignBarsToFull(times, bars) {
     var map = {};
     times.forEach(function (t, i) { map[t] = i; });
-    var fb = [], fc = [];
-    FULL_T.forEach(function (t) {
-      if (map[t] != null) {
-        fb.push(bars[map[t]]);
-        fc.push(closes[map[t]]);
-      } else {
-        fb.push(null);
-        fc.push(null);
-      }
+    return FULL_T.map(function (t) {
+      return map[t] != null ? bars[map[t]] : null;
     });
-    return { bars: fb, closes: fc };
   }
 
   function pctBg(p, absMax) {
@@ -151,9 +146,9 @@
   }
 
   function renderStatic() {
-    var t = initData.times || [], b = initData.bars || [], c = initData.closes || [], tb = initData.table || [];
+    var t = initData.times || [], b = initData.bars || [], tb = initData.table || [];
     if (!t.length) return;
-    minuteTimes = t; minuteBars = b; minuteCloses = c;
+    minuteTimes = t; minuteBars = b;
     minuteDate = String(initData.date || "");
     buildCum(b);
     document.getElementById("tagDate").textContent = (initData.date || "") + " 分时";
@@ -165,36 +160,51 @@
   }
 
   function drawMinuteChart() {
-    var al = alignToFull(minuteTimes, minuteBars, minuteCloses);
-    var shownBars = al.bars;
-    var shownCloses = al.closes;
+    var shownBars = alignBarsToFull(minuteTimes, minuteBars);
     var shownT = FULL_T;
-    var lineColor = "#e8862e";
-    var mark = preClose ? {
+    var legendNames = [BAR_LABEL].concat(INDICES.map(function (idx) { return idx.name; }));
+    var zeroMark = {
       symbol: "none",
       lineStyle: { type: "dashed", width: 1, color: "#8a93a3" },
-      label: { formatter: "昨收 " + preClose.toFixed(2), position: "insideEndTop" },
-      data: [{ yAxis: preClose }]
-    } : undefined;
+      label: { formatter: "昨收 0.00%", position: "insideEndTop" },
+      data: [{ yAxis: 0 }]
+    };
+    var seriesList = [
+      { name: BAR_LABEL, type: "bar", data: shownBars, itemStyle: { color: "#4c7bf3" } }
+    ];
+    indexSeriesData.forEach(function (idxItem, idxPos) {
+      seriesList.push({
+        name: idxItem.name,
+        type: "line",
+        yAxisIndex: 1,
+        data: idxItem.pcts,
+        connectNulls: true,
+        showSymbol: false,
+        lineStyle: { width: 1.8, color: idxItem.color },
+        itemStyle: { color: idxItem.color },
+        markLine: idxPos === 0 ? zeroMark : undefined
+      });
+    });
     ensureChart().setOption({
-      title: { text: "20只ETF分钟成交额与上证综指分时", left: 8, top: 6, padding: 0, textStyle: { fontSize: 14 } },
-      legend: { data: [BAR_LABEL, IDX_LABEL], left: 8, top: 26, type: "scroll", height: 24, itemWidth: 16, itemHeight: 10 },
+      title: { text: "20只ETF分钟成交额与沪深300 / 创业板指 / 科创50分时", left: 8, top: 6, padding: 0, textStyle: { fontSize: 14 } },
+      legend: { data: legendNames, left: 8, top: 26, type: "scroll", height: 24, itemWidth: 16, itemHeight: 10 },
       grid: { top: 76, left: 16, right: 8, bottom: 54, containLabel: true },
       tooltip: { trigger: "axis", formatter: minuteTooltip },
       xAxis: { type: "category", data: shownT, axisLabel: { hideOverlap: true }, boundaryGap: true },
       yAxis: [
         { type: "value", name: "亿元", min: 0, max: barAxisMax(shownBars), splitNumber: 5, nameTextStyle: { align: "left" } },
-        { type: "value", name: "上证综指（点）", scale: true, nameTextStyle: { align: "right" } }
+        {
+          type: "value",
+          name: "指数涨跌幅",
+          scale: true,
+          nameTextStyle: { align: "right" },
+          axisLabel: { formatter: function (v) { return (v > 0 ? "+" : "") + Number(v).toFixed(2) + "%"; } }
+        }
       ],
       /* moveOnMouseMove:false —— 让左键拖动留给区间框选，而不是 dataZoom 平移 */
       dataZoom: [ { type: "inside", xAxisIndex: 0, moveOnMouseMove: false, zoomOnMouseWheel: true },
                   { type: "slider", xAxisIndex: 0, height: 16, bottom: 12 } ],
-      series: [
-        { name: BAR_LABEL, type: "bar", data: shownBars },
-        { name: IDX_LABEL, type: "line", yAxisIndex: 1, data: shownCloses, connectNulls: false,
-          showSymbol: false, lineStyle: { width: 1.6, color: lineColor }, itemStyle: { color: lineColor },
-          markLine: mark }
-      ]
+      series: seriesList
     }, true);
   }
 
@@ -294,14 +304,20 @@
   function minuteTooltip(ps) {
     var t = ps[0].axisValue, out = [t];
     var i = FULL_T.indexOf(t);
+    var idxMap = {};
+    indexSeriesData.forEach(function (it) { idxMap[it.name] = it; });
     ps.forEach(function (p) {
-      if (p.seriesType === "bar") { out.push("ETF分钟成交额：" + (p.value == null ? "--" : Number(p.value).toFixed(2) + " 亿")); }
-      else { out.push("上证综指：" + (p.value == null ? "--" : Number(p.value).toFixed(2))); }
+      if (p.seriesType === "bar") {
+        out.push("ETF分钟成交额：" + (p.value == null ? "--" : Number(p.value).toFixed(2) + " 亿"));
+        if (i != null && cum[i] != null) out.push("累计（截至该分钟）：" + cum[i].toFixed(2) + " 亿");
+      } else {
+        var it = idxMap[p.seriesName];
+        var rawClose = it && it.closes && it.closes[t] != null ? Number(it.closes[t]).toFixed(2) : null;
+        var pctStr = p.value == null ? "--" : (Number(p.value) > 0 ? "+" : "") + Number(p.value).toFixed(2) + "%";
+        var dot = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + p.color + ';margin-right:5px"></span>';
+        out.push(dot + p.seriesName + "：" + (rawClose ? rawClose + "（" + pctStr + "）" : pctStr));
+      }
     });
-    if (i != null && cum[i] != null) out.push("累计（截至该分钟）：" + cum[i].toFixed(2) + " 亿");
-    if (preClose && ps[1] && ps[1].value != null) {
-      out.push("较昨收：" + ((Number(ps[1].value) / preClose - 1) * 100).toFixed(2) + "%");
-    }
     return out.join("<br/>");
   }
 
@@ -355,14 +371,19 @@
   window.__fetchJsonRetry = fetchJsonRetry;
 
   function toRows(arr) {
-    var rows = [], lastDay = null;
+    var rows = [], lastDay = null, prevClose = null;
     (arr || []).forEach(function (k) { if (k && k.day) lastDay = k.day.slice(0, 10); });
     (arr || []).forEach(function (k) {
-      if (!k || !k.day || !lastDay || k.day.slice(0, 10) !== lastDay) return;
-      if (!isFinite(parseFloat(k.close))) return;
-      rows.push({ t: k.day.slice(11, 16), dt: k.day, close: parseFloat(k.close), amount: parseFloat(k.amount) });
+      if (!k || !k.day || !lastDay) return;
+      var c = parseFloat(k.close);
+      if (!isFinite(c)) return;
+      if (k.day.slice(0, 10) !== lastDay) {
+        prevClose = c;
+        return;
+      }
+      rows.push({ t: k.day.slice(11, 16), dt: k.day, close: c, amount: parseFloat(k.amount) });
     });
-    return { pre: null, rows: rows };
+    return { pre: prevClose, rows: rows };
   }
 
   function sinaJsonp(symbol, scale, datalen, timeoutMs) {
@@ -410,7 +431,9 @@
   /* 批量分时：优先走本地 /api/ktrends；若部署在纯静态托管（GitHub Pages 等）无后端，
      自动切换为浏览器直连新浪 JSONP 并发拉取。 */
   function trendsBatch() {
-    var syms = [INDEX_SECID].concat(ETFS.map(function (e) { return e.m + "." + e.code; })).map(sym);
+    var idxSyms = INDICES.map(function (i) { return sym(i.secid); });
+    var etfSyms = ETFS.map(function (e) { return sym(e.m + "." + e.code); });
+    var syms = idxSyms.concat(etfSyms);
     function viaSina() {
       return Promise.all(syms.map(function (s) {
         return sinaJsonp(s, 1, 260).then(function (arr) {
@@ -440,43 +463,77 @@
   }
 
   function snapshot() {
-    var codes = [INDEX_SECID].concat(ETFS.map(function (e) { return e.m + "." + e.code; })).map(sym).join(",");
+    var idxSyms = INDICES.map(function (i) { return sym(i.secid); });
+    var etfSyms = ETFS.map(function (e) { return sym(e.m + "." + e.code); });
+    var codes = idxSyms.concat(etfSyms).join(",");
     var p = IS_STATIC_HOST
       ? emDirectHq(codes)
       : fetchJsonRetry("/api/hq?codes=" + codes, 1).catch(function () { return emDirectHq(codes); });
     return p.then(function (r) {
       var diff = (r && r.data && r.data.diff) || [];
-      var idx = null, list = [];
+      var idxPreMap = {}, idxCodeSet = {};
+      INDICES.forEach(function (i) { idxCodeSet[i.code] = true; });
+      var list = [];
       diff.forEach(function (x) {
-        if (x.f12 === "000001" && idx === null) { idx = x; return; }
+        if (idxCodeSet[x.f12] && idxPreMap[x.f12] == null) {
+          idxPreMap[x.f12] = Number(x.f18) || null;
+          return;
+        }
         list.push(x);
       });
-      return { idx: idx, list: list };
+      return { idxPreMap: idxPreMap, list: list };
     });
   }
 
-  function renderLive(indexTr, etfTrs, snap) {
-    var idxRows = indexTr.rows;
-    if (!idxRows.length) {
+  function renderLive(idxTrList, etfTrs, snap) {
+    var primaryTr = null;
+    for (var m = 0; m < idxTrList.length; m++) {
+      if (idxTrList[m] && idxTrList[m].rows && idxTrList[m].rows.length) {
+        primaryTr = idxTrList[m];
+        break;
+      }
+    }
+    if (!primaryTr) {
       document.getElementById("tagUpdate").textContent = "暂无分时数据";
       document.getElementById("tagUpdate").className = "tag err";
       return;
     }
+    var idxRows = primaryTr.rows;
     document.getElementById("tagDate").textContent = (idxRows[0].dt || "").slice(0, 10) + " 分时";
     var sums = {};
     etfTrs.forEach(function (tr) {
       tr.rows.forEach(function (r) { sums[r.t] = (sums[r.t] || 0) + r.amount; });
     });
-    var times = [], bars = [], closes = [];
+    var times = [], bars = [];
     idxRows.forEach(function (r) {
       times.push(r.t);
       bars.push(+((sums[r.t] || 0) / 1e8).toFixed(2));
-      closes.push(r.close);
     });
-    minuteTimes = times; minuteBars = bars; minuteCloses = closes;
+    minuteTimes = times; minuteBars = bars;
     minuteDate = String((idxRows[0] && idxRows[0].dt || "").slice(0, 10));
     buildCum(bars);
-    if (snap && snap.idx && Number(snap.idx.f18)) preClose = Number(snap.idx.f18);
+
+    var preMap = (snap && snap.idxPreMap) || {};
+    indexSeriesData = INDICES.map(function (meta, idx) {
+      var tr = idxTrList[idx];
+      var rows = (tr && tr.rows) || [];
+      var pre = preMap[meta.code] || (tr && tr.pre) || (rows[0] && rows[0].close) || null;
+      var closeByTime = {};
+      rows.forEach(function (r) { closeByTime[r.t] = r.close; });
+      var pcts = FULL_T.map(function (t) {
+        var c = closeByTime[t];
+        if (c == null || !pre) return null;
+        return +(((c / pre) - 1) * 100).toFixed(2);
+      });
+      return {
+        code: meta.code,
+        name: meta.name,
+        color: meta.color,
+        preClose: pre,
+        closes: closeByTime,
+        pcts: pcts
+      };
+    });
 
     if (snap && snap.list) {
       var rows = snap.list.map(function (x) {
@@ -522,21 +579,25 @@
     try {
       var jobs = [trendsBatch()];
       jobs.push(snapshot());
-      /* 1 个批量分时 + 1 个快照。批量接口里每个标的独立成功/失败，
-         指数必须有（没有就没法画），ETF 允许个别缺失，但成功率不足 80% 时宁可不画 ——
-         少几只的合计成交额会偏低，画出来是错的。 */
       var safe = function (p) {
         return p.then(function (v) { return { ok: true, v: v }; },
                       function () { return { ok: false }; });
       };
       Promise.all(jobs.map(safe)).then(function (rs) {
         var list = (rs[0].ok && rs[0].v) || [];
-        var indexTr = list.length && list[0] && list[0].ok ? list[0].v : null;
+        var nIdx = INDICES.length;
+        var idxTrList = [];
+        var hasAnyIdx = false;
+        for (var i = 0; i < nIdx; i++) {
+          var item = list[i] && list[i].ok ? list[i].v : null;
+          if (item && item.rows && item.rows.length) hasAnyIdx = true;
+          idxTrList.push(item);
+        }
         var snap = rs[1].ok ? rs[1].v : null;
         var etfTrs = [];
-        for (var k = 1; k < list.length; k++) if (list[k] && list[k].ok) etfTrs.push(list[k].v);
+        for (var k = nIdx; k < list.length; k++) if (list[k] && list[k].ok) etfTrs.push(list[k].v);
         var need = Math.ceil(ETFS.length * 0.8);
-        if (!indexTr || !indexTr.rows || !indexTr.rows.length) {
+        if (!hasAnyIdx) {
           retryOrWarn("指数分时拉取失败，保留上次数据");
           return;
         }
@@ -545,7 +606,7 @@
           return;
         }
         state.retry = 0;
-        renderLive(indexTr, etfTrs, snap);
+        renderLive(idxTrList, etfTrs, snap);
         state.loading = false;
       }).catch(function (e) {
         retryOrWarn("刷新失败，保留上次数据");
