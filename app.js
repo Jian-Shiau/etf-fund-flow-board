@@ -400,6 +400,44 @@
   }
   window.__sinaJsonp = sinaJsonp;
 
+  /* 腾讯行情 JSONP 兜底：GitHub Pages 等静态托管上 push2 会被浏览器拦（CORS/failed to fetch），
+     qt.gtimg.cn 走 <script> 标签不受同源限制，返回同名全局变量 v_shXXXXXX，可直接解析。 */
+  function tencentHq(codesStr) {
+    return new Promise(function (resolve, reject) {
+      var list = String(codesStr).split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!list.length) return reject(new Error("no codes"));
+      var sc = document.createElement("script");
+      sc.src = "https://qt.gtimg.cn/q=" + list.join(",") + "&_=" + Date.now();
+      sc.charset = "gbk";
+      var fin = false;
+      function cleanup() { if (sc.parentNode) sc.parentNode.removeChild(sc); }
+      sc.onload = function () {
+        if (fin) return;
+        fin = true;
+        var diff = [];
+        list.forEach(function (c) {
+          var v = window["v_" + c.toLowerCase()];
+          if (typeof v !== "string") return;
+          var f = v.split("~");
+          if (f.length < 38) return;
+          var amt = 0, seg = (f[35] || "").split("/");
+          if (seg.length === 3 && seg[2]) amt = parseFloat(seg[2]) || 0;
+          if (!amt) amt = (parseFloat(f[37]) || 0) * 1e4;   /* 兜底：成交额(万元) */
+          diff.push({ f2: parseFloat(f[3]) || 0, f3: parseFloat(f[32]) || 0, f6: amt,
+                      f12: f[2], f14: f[1], f18: parseFloat(f[4]) || 0 });
+        });
+        cleanup();
+        if (!diff.length) return reject(new Error("tencent empty"));
+        resolve({ data: { total: diff.length, diff: diff } });
+      };
+      sc.onerror = function () {
+        if (fin) return;
+        fin = true; cleanup(); reject(new Error("tencent load"));
+      };
+      document.head.appendChild(sc);
+    });
+  }
+
   function emDirectHq(codesStr) {
     var secids = String(codesStr).split(",").filter(Boolean).map(function (c) {
       c = c.trim().toLowerCase();
@@ -408,7 +446,7 @@
       return c;
     }).join(",");
     var url = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f3,f6,f12,f14,f18&secids=" + encodeURIComponent(secids);
-    return fetchJsonRetry(url, 2);
+    return fetchJsonRetry(url, 2).catch(function () { return tencentHq(codesStr); });
   }
   window.__emDirectHq = emDirectHq;
 
