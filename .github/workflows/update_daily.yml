@@ -18,6 +18,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run daily update script
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: python3 update_daily.py
 
       - name: Commit and push if changed
