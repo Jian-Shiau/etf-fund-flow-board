@@ -127,12 +127,11 @@ def save_islands(D):
         f.write(hdr + "window.__ISLANDS = " + json.dumps(D, ensure_ascii=False, separators=(",", ":")) + ";\n")
 
 
-def update_daily(token):
-    D = load_islands()
+def update_daily(D, token, daily=None):
     dd = D["dailyData"]
     last_iso = dd["dates"][-1]
     print(f"[日度] data.js 现有最后日期 {last_iso}（{len(dd['dates'])} 行）")
-    daily = tushare_daily(token)
+    daily = daily or tushare_daily(token)
     new = sorted(k for k in daily if f"{k[:4]}-{k[4:6]}-{k[6:]}" > last_iso)
     if not new:
         print("[日度] 已是最新，无新增交易日")
@@ -164,6 +163,93 @@ def update_daily(token):
     return D
 
 
+# ---------------------------------------------------------------- 全市场宽基
+BROAD_BAD = None
+
+def broad_classify(name, bench):
+    """按名称/基准把宽基 ETF 归到 12 个跟踪指数桶（排除增强/风格/跨境/债券）"""
+    import re
+    global BROAD_BAD
+    if BROAD_BAD is None:
+        BROAD_BAD = re.compile(r"增强|价值|成长|ESG|红利|低波|等权|医药|非银|金融|消费|科技|国企|央企|"
+                               r"恒生|港股|纳斯达克|标普|日经|德国|法国|东南亚|沙特|QDII|黄金|债|货币|REIT")
+    OTHER = re.compile(r"上证180|深证100|中证100|中证800|中证A100|中证A50|中证全指|MSCI|北证50|"
+                       r"上证380|深证成指|央视50|中证200|中证300|中证700|中证A800|上证综指|深证综指")
+    s = name or ""
+    if BROAD_BAD.search(s):
+        return None
+    if "创业板50" in s: return "创业板50"
+    if "双创50" in s or "科创创业50" in s: return "双创50"
+    if "沪深300" in s: return "沪深300"
+    if "中证1000" in s: return "中证1000"
+    if "中证500" in s: return "中证500"
+    if "A500" in s: return "中证A500"
+    if "科创50" in s or "科创板50" in s: return "科创50"
+    if "创业板" in s: return "创业板指"
+    if "上证50" in s: return "上证50"
+    if "中证2000" in s: return "中证2000"
+    if "国证2000" in s: return "国证2000"
+    if OTHER.search(s) or OTHER.search(str(bench or "")): return "其他宽基"
+    return None
+
+
+def broad_universe(token):
+    fb = tushare("fund_basic", {"market": "E", "status": "L"},
+                 "ts_code,name,benchmark,fund_type,invest_type", token)
+    uni = {}
+    for f in fb:
+        if f.get("fund_type") != "股票型" or f.get("invest_type") == "增强指数型":
+            continue
+        c = broad_classify(f.get("name"), f.get("benchmark"))
+        if c:
+            uni[f["ts_code"]] = c
+    return uni
+
+
+def all_day_quotes(token, d):
+    sh = {x["ts_code"]: float(x["fd_share"] or 0)
+          for x in tushare("fund_share", {"trade_date": d}, "ts_code,fd_share", token)}
+    px = {x["ts_code"]: float(x["close"] or 0)
+          for x in tushare("fund_daily", {"trade_date": d}, "ts_code,close", token)}
+    return sh, px
+
+
+def update_broad(D, token, trading_days):
+    """trading_days: ['20261111', ...] 已按升序，含需要补的日期"""
+    bd = D["broadData"]
+    cats = bd["cats"]
+    last_iso = bd["dates"][-1]
+    new = [d for d in trading_days if f"{d[:4]}-{d[4:6]}-{d[6:]}" > last_iso]
+    if not new:
+        print("[宽基] 已是最新")
+        return D
+    uni = broad_universe(token)
+    print(f"[宽基] 归类 ETF {len(uni)} 只，待补 {len(new)} 天")
+
+    prev_sh, _ = all_day_quotes(token, trading_days[max(0, trading_days.index(new[0]) - 1)])
+    cum = bd["totalCum"][-1]
+    for d in new:
+        sh, px = all_day_quotes(token, d)
+        if not sh:
+            print(f"  {d} 份额未发布，跳过（次日自动补）")
+            continue
+        cats_sum = {c: 0.0 for c in cats}
+        for code, cat in uni.items():
+            if code in sh and code in prev_sh and code in px:
+                cats_sum[cat] += (sh[code] - prev_sh[code]) * px[code] / 10000.0
+        iso = f"{d[:4]}-{d[4:6]}-{d[6:]}"
+        bd["dates"].append(iso)
+        for c in cats:
+            bd["series"][c].append(round(cats_sum[c], 2))
+        tot = round(sum(cats_sum.values()), 2)
+        bd["total"].append(tot)
+        cum = round(cum + tot, 1)
+        bd["totalCum"].append(cum)
+        prev_sh = sh
+        print(f"  + 宽基 {iso} 合计 {tot:+7.2f} 亿 | 累计 {cum:.1f}")
+    return D
+
+
 # ---------------------------------------------------------------- 当日分时
 def update_cum(D):
     sums, trade_date = {}, None
@@ -172,7 +258,7 @@ def update_cum(D):
         url = ("https://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData"
                f"?symbol={sym}&scale=1&ma=no&datalen=300")
         arr = None
-        for k in range(3):
+        for k in range(6):
             try:
                 req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn/",
                                                            "User-Agent": "Mozilla/5.0"})
@@ -180,7 +266,7 @@ def update_cum(D):
                                  .read().decode("utf-8", "replace"))
                 break
             except Exception:
-                time.sleep(1.2 * (k + 1))
+                time.sleep(1.5 * (k + 1))
         if not isinstance(arr, list) or not arr:
             print(f"  [分时] {code} 取数失败，跳过")
             continue
@@ -221,7 +307,9 @@ def main():
         print("[warn] 未设置 TUSHARE_TOKEN：跳过日度净流入更新，只补当日分时")
     D = load_islands()
     if token:
-        D = update_daily(token)
+        daily = tushare_daily(token)
+        D = update_daily(D, token, daily)
+        D = update_broad(D, token, sorted(daily))
     D = update_cum(D)
     save_islands(D)
     print(f"[done] data.js / cumdays.json 已写入 {datetime.datetime.now():%Y-%m-%d %H:%M:%S}")
